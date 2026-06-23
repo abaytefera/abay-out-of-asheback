@@ -1,0 +1,957 @@
+
+
+generator client {
+  provider        = "prisma-client-js"
+
+}
+
+datasource db {
+  provider  = "postgresql"
+  url  	    = env("DATABASE_URL")
+ 
+ directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum ChildStatus {
+  ACTIVE
+  GRADUATED
+  SUSPENDED
+  TRANSFERRED
+  DROPPED
+}
+
+enum SchoolWon {
+  PRIVATE
+  GOVERMENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+}
+
+enum IncomeRange {
+  NONE
+  BELOW_500
+  RANGE_500_1000
+  RANGE_1001_3000
+  ABOVE_3000
+}
+
+enum HousingCondition {
+  OWNED
+  RENTED
+  INFORMAL
+  HOMELESS
+}
+
+enum WaterAccess {
+  PIPED
+  WELL
+  RIVER
+  COMMUNAL_TAP
+  NONE
+}
+
+enum SanitationAccess {
+  PRIVATE_TOILET
+  SHARED_TOILET
+  OPEN_DEFECATION
+  NONE
+}
+
+enum CommitteeDecision {
+  APPROVED
+  REJECTED
+  DEFERRED
+  PENDING
+}
+
+enum VisitPurpose {
+  ROUTINE
+  FOLLOW_UP
+  EMERGENCY
+  INTAKE_ASSESSMENT
+  EXIT_VISIT
+}
+
+enum SupportMaterialType {
+  SCHOOL_FEES
+  UNIFORM
+  SUPPLIES
+  TUTORING
+  BOOTCAMP
+}
+
+enum IncidentType {
+  ABUSE
+  NEGLECT
+  CHILD_LABOR
+  SCHOOL_VIOLENCE
+  MISSING_CHILD
+  OTHER
+}
+
+enum CaseStatus {
+  OPEN
+  UNDER_INVESTIGATION
+  REFERRED
+  CLOSED
+  REOPENED
+}
+
+enum TBRIPillar {
+  CONNECTING
+  EMPOWERING
+  CORRECTING
+}
+
+enum BehavioralState {
+  REGULATED
+  HYPER_AROUSAL
+  HYPO_AROUSAL
+  UNREGULATED
+}
+
+enum FinancialSupportType {
+  SCHOOL_FEES
+  RENT
+  FOOD
+  MEDICAL
+  EMERGENCY_CASH
+  OTHER
+}
+
+enum WorkflowStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum WorkflowType {
+  ADMISSION
+  FINANCIAL_REQUEST
+  SAFEGUARDING_CASE
+  EXIT
+  HOME_VISIT_APPROVAL
+}
+
+enum UserRole {
+  SOCIAL_WORKER
+  EDUCATION_OFFICER
+  FINANCE_OFFICER
+  HEALTH_OFFICER
+  PSYCHOSOCIAL_OFFICER
+  PROGRAM_MANAGER
+  COUNTRY_DIRECTOR
+  ADMIN
+}
+
+enum PromotionStatus {
+  PROMOTED
+  REPEATED
+  PENDING
+  GRADUATED
+  DROPPED_OUT
+}
+
+enum NotificationType {
+  SAFEGUARDING_ALERT
+  FINANCIAL_APPROVAL_REQUEST
+  HOME_VISIT_DUE
+  ACADEMIC_ALERT
+  SYSTEM_ANNOUNCEMENT
+  DATA_CREATE
+  DATA_UPDATE
+  DATA_DELETE
+  SECURITY_WARNING
+  NEW_VISIT_LOGGED
+  NEW_APPOINTMENT_ASSIGNED
+  UPCOMING_REMINDER
+  TODAY_VISIT_ALERT
+  EMERGENCY_ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// =============================================================================
+// MODULE 1 — CHILD PROFILE MANAGEMENT
+// =============================================================================
+
+model Child {
+  id                    String                    @id @default(cuid())
+  childCode             String                    @unique
+  firstName             String
+  lastName              String
+  dateOfBirth           DateTime
+  gender                Gender
+  nationality           String?
+  religion              String?
+  subCity               String?
+  kebele                String?
+  admissionDate         DateTime
+  exitDate              DateTime?
+  status                ChildStatus               @default(ACTIVE)
+  schoolName            String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  notes                 String?
+
+  householdId           String?
+  household             Household?                @relation(fields: [householdId], references: [id])
+  photos                ChildPhoto[]
+  documents             ChildDocument[]
+  assessments           VulnerabilityAssessment[]
+  homeVisits            HomeVisit[]
+  homeVisitAppointments HomeVisitAppointment[]
+  academicRecords       AcademicRecord[]
+  materialSupports      MaterialSupport[]
+  sponsorships          Sponsorship[]
+  safeguardingCases     SafeguardingCase[]
+  healthRecords         HealthRecord[]
+  vaccinations          Vaccination[]
+  nutritionRecords      NutritionRecord[]
+  psychosocialSessions  PsychosocialSession[]
+  tbriActivities        TBRIActivity[]
+  financialSupports     FinancialSupport[]
+  auditLogs             AuditLog[]
+  otherFile             ChildOtherRecord[]
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  @@index([status])
+  @@index([subCity])
+  @@index([admissionDate])
+}
+
+model ChildPhoto {
+  id         String   @id @default(cuid())
+  childId    String
+  child      Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String
+  isPrimary  Boolean  @default(false)
+  uploadedAt DateTime @default(now())
+
+  @@index([childId])
+}
+
+model ChildDocument {
+  id           String   @id @default(cuid())
+  childId      String
+  child        Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  title        String
+  category     String
+  fileUrl      String
+  filePublicId String
+  // ✅ FIX: SetNull so deleting a staff member doesn't block or erase documents
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedAt   DateTime @default(now())
+  notes        String?
+
+  @@index([childId])
+}
+
+model ChildOtherRecord {
+  id          String                 @id @default(cuid())
+  childId     String
+  title       String
+  description String                 @default("")
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  child       Child                  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  files       ChildOtherRecordFile[]
+
+  @@index([childId])
+}
+
+model ChildOtherRecordFile {
+  id        String           @id @default(cuid())
+  recordId  String
+  url       String
+  publicId  String
+  createdAt DateTime         @default(now())
+  record    ChildOtherRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([recordId])
+  @@index([publicId])
+}
+
+// =============================================================================
+// MODULE 2 — FAMILY & HOUSEHOLD MANAGEMENT
+// =============================================================================
+
+model Household {
+  id                String            @id @default(cuid())
+  householdCode     String            @unique
+  address           String?
+  subCity           String?
+  kebele            String?
+  housingCondition  HousingCondition?
+  waterAccess       WaterAccess?
+  sanitationAccess  SanitationAccess?
+  hasDisabledMember Boolean           @default(false)
+  numberOfMembers   Int?
+  notes             String?
+
+  guardians         Guardian[]
+  children          Child[]
+  incomeSources     IncomeSource[]
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Guardian {
+  id                 String         @id @default(cuid())
+  householdId        String
+  household          Household      @relation(fields: [householdId], references: [id])
+  firstName          String
+  lastName           String
+  relationship       String
+  photos             ParentPhoto[]
+  phone              String?
+  email              String?
+  occupation         String?
+  educationLevel     String?
+  maritalStatus      MaritalStatus?
+  incomeRange        IncomeRange?
+  isEmergencyContact Boolean        @default(false)
+
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([householdId])
+}
+
+model ParentPhoto {
+  id         String   @id @default(cuid())
+  guardianId String
+  guardian   Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String
+  isPrimary  Boolean  @default(false)
+  uploadedAt DateTime @default(now())
+
+  @@index([guardianId])
+}
+
+model IncomeSource {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id])
+  source      String
+  amount      Float?
+  frequency   String?
+}
+
+// =============================================================================
+// MODULE 3 — CHILD ASSESSMENT & SELECTION
+// =============================================================================
+
+model VulnerabilityAssessment {
+  id                 String                   @id @default(cuid())
+  childId            String
+  child              Child                    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  assessmentDate     DateTime
+  // ✅ FIX: SetNull — preserve assessment record if assessor is deleted
+  assessorId         String?
+  assessor           User?                    @relation(fields: [assessorId], references: [id], onDelete: SetNull)
+  isOrphan           Boolean                  @default(false)
+  isSingleParent     Boolean                  @default(false)
+  isExtremePoverty   Boolean                  @default(false)
+  childLaborRisk     Boolean                  @default(false)
+  highAbsenteeism    Boolean                  @default(false)
+  vulnerabilityScore Int
+  committeeDate      DateTime?
+  committeeDecision  CommitteeDecision        @default(PENDING)
+  committeeNotes     String?                  @db.Text
+  evidenceFiles      AssessmentEvidenceFile[]
+  // ✅ FIX: SetNull — already nullable, just needed onDelete
+  approvedById       String?
+  approvedBy         User?                    @relation("AssessmentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvalHistory    Json?
+
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([childId])
+  @@index([committeeDecision])
+}
+
+model AssessmentEvidenceFile {
+  id           String                  @id @default(cuid())
+  assessmentId String
+  assessment   VulnerabilityAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  url          String
+  publicId     String
+  uploadedAt   DateTime                @default(now())
+
+  @@index([assessmentId])
+}
+
+// =============================================================================
+// MODULE 4 — HOME VISIT & WORKFLOW MANAGEMENT
+// =============================================================================
+
+model HomeVisit {
+  id             String           @id @default(cuid())
+  childId        String
+  child          Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  visitDate      DateTime
+  // ✅ FIX: SetNull — preserve visit record if staff member is deleted
+  staffId        String?
+  staff          User?            @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  purpose        VisitPurpose
+  observations   String?          @db.Text
+  familyNeeds    String?          @db.Text
+  actionItems    String?          @db.Text
+  followUpDate   DateTime?
+  isFollowUpDone Boolean          @default(false)
+  photos         HomeVisitPhoto[]
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([childId])
+  @@index([visitDate])
+  @@index([followUpDate])
+}
+
+model HomeVisitPhoto {
+  id          String    @id @default(cuid())
+  homeVisitId String
+  homeVisit   HomeVisit @relation(fields: [homeVisitId], references: [id], onDelete: Cascade)
+  url         String
+  publicId    String
+  uploadedAt  DateTime  @default(now())
+
+  @@index([homeVisitId])
+}
+
+model HomeVisitAppointment {
+  id              String   @id @default(cuid())
+  childId         String
+  child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  // ✅ FIX: SetNull — preserve appointment history if staff member is deleted
+  assignedToId    String?
+  assignedTo      User?    @relation("AssignedWorker", fields: [assignedToId], references: [id], onDelete: SetNull)
+  appointmentDate DateTime
+  status          String   @default("PENDING") // PENDING, FULFILLED, CANCELED
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([assignedToId])
+  @@index([appointmentDate])
+}
+
+// =============================================================================
+// MODULE 5 — EDUCATION SUPPORT
+// =============================================================================
+
+model AcademicRecord {
+  id                String           @id @default(cuid())
+  childId           String
+  child             Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  schoolName        String
+  academicYear      String
+  semester          String?
+  grade             String
+  rank              Int?
+  averageScore      Float?
+  attendanceRate    Float?
+  nationalExamScore Float?
+  promotionStatus   PromotionStatus  @default(PENDING)
+  teacherNotes      String?          @db.Text
+  alerts            EducationAlert[]
+  files             AcademicFile[]
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([childId])
+  @@index([academicYear])
+}
+
+model AcademicFile {
+  id               String         @id @default(cuid())
+  academicRecordId String
+  academicRecord   AcademicRecord @relation(fields: [academicRecordId], references: [id], onDelete: Cascade)
+  url              String
+  publicId         String
+  fileName         String?
+  uploadedAt       DateTime       @default(now())
+
+  @@index([academicRecordId])
+}
+
+model EducationAlert {
+  id               String         @id @default(cuid())
+  academicRecordId String
+  academicRecord   AcademicRecord @relation(fields: [academicRecordId], references: [id], onDelete: Cascade)
+  alertType        String
+  message          String
+  isResolved       Boolean        @default(false)
+  // ✅ FIX: SetNull — already nullable, just needed onDelete
+  resolvedById     String?
+  resolvedBy       User?          @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt       DateTime?
+  createdAt        DateTime       @default(now())
+
+  @@index([isResolved])
+}
+
+model MaterialSupport {
+  id              String              @id @default(cuid())
+  childId         String
+  child           Child               @relation(fields: [childId], references: [id], onDelete: Cascade)
+  type            SupportMaterialType
+  description     String?
+  quantity        Int?
+  distributeDate  DateTime
+  // ✅ FIX: SetNull — preserve distribution record if staff member is deleted
+  distributedById String?
+  distributedBy   User?               @relation(fields: [distributedById], references: [id], onDelete: SetNull)
+  academicYear    String?
+
+  @@index([childId])
+}
+
+// =============================================================================
+// MODULE 6 — SPONSORSHIP & DONOR MANAGEMENT
+// =============================================================================
+
+model Sponsor {
+  id           String         @id @default(cuid())
+  firstName    String
+  lastName     String
+  country      String?
+  email        String?        @unique
+  phone        String?
+  organization String?
+  notes        String?
+  sponsorships Sponsorship[]
+  photos       SponsorPhoto[]
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model SponsorPhoto {
+  id         String   @id @default(cuid())
+  sponsorId  String
+  sponsor    Sponsor  @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String
+  uploadedAt DateTime @default(now())
+
+  @@index([sponsorId])
+}
+
+model Sponsorship {
+  id            String        @id @default(cuid())
+  childId       String
+  child         Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  sponsorId     String
+  sponsor       Sponsor       @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+  startDate     DateTime
+  endDate       DateTime?
+  isActive      Boolean       @default(true)
+  monthlyAmount Float?
+  donorReports  DonorReport[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([childId])
+  @@index([sponsorId])
+}
+
+model DonorReport {
+  id            String            @id @default(cuid())
+  sponsorshipId String
+  sponsorship   Sponsorship       @relation(fields: [sponsorshipId], references: [id], onDelete: Cascade)
+  sentDate      DateTime
+  reportType    String
+  notes         String?
+  files         DonorReportFile[]
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([sponsorshipId])
+}
+
+model DonorReportFile {
+  id            String      @id @default(cuid())
+  donorReportId String
+  donorReport   DonorReport @relation(fields: [donorReportId], references: [id], onDelete: Cascade)
+  url           String
+  publicId      String
+  fileName      String?
+  uploadedAt    DateTime    @default(now())
+
+  @@index([donorReportId])
+}
+
+// =============================================================================
+// MODULE 7 — SAFEGUARDING & CHILD PROTECTION
+// =============================================================================
+
+model SafeguardingCase {
+  id                String               @id @default(cuid())
+  childId           String
+  child             Child                @relation(fields: [childId], references: [id], onDelete: Cascade)
+  incidentDate      DateTime
+  // ✅ FIX: SetNull — preserve case record if reporting staff member is deleted
+  reportedById      String?
+  reportedBy        User?                @relation("SafeguardingReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+  incidentType      IncidentType
+  description       String               @db.Text
+  status            CaseStatus           @default(OPEN)
+  actionPlan        String?              @db.Text
+  externalReferral  String?
+  followUpNotes     String?              @db.Text
+  closedAt          DateTime?
+  // ✅ FIX: SetNull — already nullable, just needed onDelete
+  closedById        String?
+  closedBy          User?                @relation("SafeguardingCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  authorizedViewers SafeguardingViewer[]
+
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([childId])
+  @@index([status])
+}
+
+model SafeguardingViewer {
+  id                 String           @id @default(cuid())
+  safeguardingCaseId String
+  safeguardingCase   SafeguardingCase @relation(fields: [safeguardingCaseId], references: [id], onDelete: Cascade)
+  userId             String
+  grantedAt          DateTime         @default(now())
+
+  @@unique([safeguardingCaseId, userId])
+  @@index([safeguardingCaseId])
+}
+
+// =============================================================================
+// MODULE 8 — HEALTH & NUTRITION
+// =============================================================================
+
+model HealthRecord {
+  id                  String             @id @default(cuid())
+  childId             String
+  child               Child              @relation(fields: [childId], references: [id], onDelete: Cascade)
+  recordDate          DateTime
+  knownDisabilities   String?            @db.Text
+  hospitalVisitReason String?
+  hospitalName        String?
+  notes               String?            @db.Text
+  // ✅ FIX: SetNull — preserve health record if staff member is deleted
+  recordedById        String?
+  recordedBy          User?              @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+  files               HealthRecordFile[]
+  createdAt           DateTime           @default(now())
+
+  @@index([childId])
+}
+
+model HealthRecordFile {
+  id             String       @id @default(cuid())
+  healthRecordId String
+  healthRecord   HealthRecord @relation(fields: [healthRecordId], references: [id], onDelete: Cascade)
+  url            String
+  publicId       String
+  fileName       String?
+  uploadedAt     DateTime     @default(now())
+
+  @@index([healthRecordId])
+}
+
+model Vaccination {
+  id             String            @id @default(cuid())
+  childId        String
+  child          Child             @relation(fields: [childId], references: [id], onDelete: Cascade)
+  vaccineName    String
+  dateGiven      DateTime
+  nextDueDate    DateTime?
+  administeredBy String?
+  notes          String?
+  files          VaccinationFile[]
+
+  @@index([childId])
+}
+
+model VaccinationFile {
+  id            String      @id @default(cuid())
+  vaccinationId String
+  vaccination   Vaccination @relation(fields: [vaccinationId], references: [id], onDelete: Cascade)
+  url           String
+  publicId      String
+  fileName      String?
+  uploadedAt    DateTime    @default(now())
+
+  @@index([vaccinationId])
+}
+
+model NutritionRecord {
+  id           String   @id @default(cuid())
+  childId      String
+  child        Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  recordDate   DateTime
+  heightCm     Float?
+  weightKg     Float?
+  bmi          Float?
+  notes        String?
+  // ✅ FIX: SetNull — preserve nutrition record if staff member is deleted
+  recordedById String?
+  recordedBy   User?    @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([childId])
+}
+
+// =============================================================================
+// MODULE 9 — PSYCHOSOCIAL SUPPORT
+// =============================================================================
+
+model PsychosocialSession {
+  id                 String    @id @default(cuid())
+  childId            String
+  child              Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  sessionDate        DateTime
+  // ✅ FIX: SetNull — preserve session record if counselor is deleted
+  counselorId        String?
+  counselor          User?     @relation(fields: [counselorId], references: [id], onDelete: SetNull)
+  sessionType        String
+  behavioralConcerns String?   @db.Text
+  traumaAssessment   String?   @db.Text
+  progressNotes      String?   @db.Text
+  nextSessionDate    DateTime?
+
+  createdAt          DateTime  @default(now())
+
+  @@index([childId])
+}
+
+model TBRIActivity {
+  id            String          @id @default(cuid())
+  childId       String
+  child         Child           @relation(fields: [childId], references: [id], onDelete: Cascade)
+  activityName  String
+  startDate     DateTime
+  endDate       DateTime?
+  tbriPillar    TBRIPillar
+  // ✅ FIX: SetNull — preserve activity record if facilitator is deleted
+  facilitatorId String?
+  facilitator   User?           @relation("ActivityFacilitator", fields: [facilitatorId], references: [id], onDelete: SetNull)
+  initialState  BehavioralState
+  progressLogs  TBRILog[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([childId])
+  @@index([tbriPillar])
+}
+
+model TBRILog {
+  id             String          @id @default(cuid())
+  tbriActivityId String
+  tbriActivity   TBRIActivity    @relation(fields: [tbriActivityId], references: [id], onDelete: Cascade)
+  // ✅ FIX: SetNull — preserve log entry if author is deleted
+  authorId       String?
+  author         User?           @relation("LogAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  strategyUsed   String?
+  observations   String          @db.Text
+  outcomes       String          @db.Text
+  resultingState BehavioralState
+  loggedAt       DateTime        @default(now())
+
+  @@index([tbriActivityId])
+  @@index([loggedAt])
+}
+
+// =============================================================================
+// MODULE 10 — FINANCIAL ASSISTANCE
+// =============================================================================
+
+model FinancialSupport {
+  id            String                 @id @default(cuid())
+  childId       String
+  child         Child                  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  supportType   FinancialSupportType
+  amount        Float
+  currency      String                 @default("ETB")
+  disbursedDate DateTime
+  // ✅ FIX: SetNull — preserve financial record if staff member is deleted
+  disbursedById String?
+  disbursedBy   User?                  @relation(fields: [disbursedById], references: [id], onDelete: SetNull)
+  academicYear  String?
+  notes         String?
+  files         FinancialSupportFile[]
+
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([childId])
+  @@index([disbursedDate])
+  @@index([supportType])
+}
+
+model FinancialSupportFile {
+  id                 String           @id @default(cuid())
+  financialSupportId String
+  financialSupport   FinancialSupport @relation(fields: [financialSupportId], references: [id], onDelete: Cascade)
+  url                String
+  publicId           String
+  fileName           String?
+  uploadedAt         DateTime         @default(now())
+
+  @@index([financialSupportId])
+}
+
+// =============================================================================
+// MODULE 11 — USER / STAFF MANAGEMENT
+// =============================================================================
+
+model User {
+  id                    String                    @id @default(cuid())
+  firstName             String
+  lastName              String
+  email                 String                    @unique
+  passwordHash          String
+  role                  UserRole
+  phone                 String?
+  isActive              Boolean                   @default(true)
+  twoFactorEnabled      Boolean                   @default(false)
+  twoFactorSecret       String?
+  avatarUrl             String?
+  avatarPublicId        String?
+  jobTitle              String?
+  department            String?
+  hireDate              DateTime?
+  backgroundCheckStatus String?
+  backgroundCheckDate   DateTime?
+
+  performanceReviews     PerformanceReview[]
+  uploadedDocuments      ChildDocument[]
+  conductedAssessments   VulnerabilityAssessment[]
+  approvedAssessments    VulnerabilityAssessment[] @relation("AssessmentApprover")
+  homeVisits             HomeVisit[]
+  appointmentsAssigned   HomeVisitAppointment[]    @relation("AssignedWorker")
+  distributedMaterials   MaterialSupport[]
+  resolvedAlerts         EducationAlert[]
+  reportedCases          SafeguardingCase[]        @relation("SafeguardingReporter")
+  closedCases            SafeguardingCase[]        @relation("SafeguardingCloser")
+  healthRecords          HealthRecord[]
+  nutritionRecords       NutritionRecord[]
+  psychosocialSessions   PsychosocialSession[]
+  tbriActivities         TBRIActivity[]            @relation("ActivityFacilitator")
+  tbriLogs               TBRILog[]                 @relation("LogAuthor")
+  financialDisbursements FinancialSupport[]
+  auditLogs              AuditLog[]
+  permission             Permission?
+  notifications          Notification[]
+
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+}
+
+model PerformanceReview {
+  id           String   @id @default(cuid())
+  // ✅ FIX: SetNull — preserve review history if staff member is deleted
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reviewDate   DateTime
+  reviewedById String
+  rating       Int
+  comments     String?  @db.Text
+  goals        String?  @db.Text
+}
+
+model Permission {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  childRegister     Boolean  @default(false)
+  childUpdate       Boolean  @default(false)
+  childDelete       Boolean  @default(false)
+  childView         Boolean  @default(true)
+
+  employeeRegister  Boolean  @default(false)
+  employeeUpdate    Boolean  @default(false)
+  employeeDelete    Boolean  @default(false)
+  employeeView      Boolean  @default(false)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  // ✅ FIX: SetNull — preserve audit history if staff member is deleted
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  childId    String?
+  child      Child?   @relation(fields: [childId], references: [id], onDelete: SetNull)
+  action     String
+  resource   String
+  resourceId String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([resource])
+  @@index([createdAt])
+}
+
+model Notification {
+  id          String               @id @default(cuid())
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  priority    NotificationPriority @default(MEDIUM)
+  title       String
+  message     String
+  entityType  String?
+  relatedId   String?
+  isRead      Boolean              @default(false)
+  readAt      DateTime?
+  createdAt   DateTime             @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Schoolname {
+  id   String    @id @default(cuid())
+  name String
+  type SchoolWon
+}
