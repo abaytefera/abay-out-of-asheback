@@ -2,6 +2,7 @@
 // services/school.service.ts
 // ============================================================
 import { PrismaClient, SchoolWon } from "@prisma/client";
+import prisma from "../../config/prisma";
 import {
   CreateSchoolDto,
   UpdateSchoolDto,
@@ -9,7 +10,7 @@ import {
 } from "./schoolTypes";
 
  
-const prisma = new PrismaClient();
+
  
 export class SchoolService {
   // ── CREATE ────────────────────────────────────────────────
