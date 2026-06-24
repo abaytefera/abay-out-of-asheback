@@ -1,58 +1,53 @@
-const { PrismaClient, UserRole } = require('@prisma/client');
+const { Pool } = require('pg');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
-const prisma = new PrismaClient();
+// 1. ዳታቤዝ ግንኙነት - ሊንኩን በቀጥታ አስገባ
+const dbUrl ="postgresql://neondb_owner:npg_sCcI5dvfr0bF@ep-proud-sun-a63hodnx-pooler.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
+// 2. Pool እና Prisma ማዋቀር
+const pool = new Pool({ 
+  connectionString: dbUrl,
+  ssl: true 
+});
+
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('🌱 Starting database seeding...');
+    console.log('🌱 Seed እየጀመረ ነው...');
 
-  // 1. Define your initial admin details
-  const adminEmail = 'abaytefera29@gmail.com'; 
-  const rawPassword = 'Abu4858@'; // Change this!
+    try {
+        // የይለፍ ቃል ማዘጋጀት
+        const passwordHash = await bcrypt.hash('Abu4858@', 10);
 
-  // 2. Check if the admin user already exists to prevent duplicates
-  const existingUser = await prisma.user.findUnique({
-    where: { email: adminEmail },
-  });
+        // ተጠቃሚውን መፍጠር (upsert ተጠቃሚው ካለ እንዳይደግመው ይረዳል)
+        const admin = await prisma.user.upsert({
+            where: { email: 'abaytefera29@gmail.com' },
+            update: {}, // ካለ ምንም አትቀይር
+            create: {
+                firstName: 'abay',
+                lastName: 'tefera',
+                email: 'abaytefera29@gmail.com',
+                passwordHash: passwordHash,
+                role: 'ADMIN',
+                isActive: true,
+                jobTitle: 'Lead Administrator',
+                department: 'Management',
+                hireDate: new Date(),
+                backgroundCheckStatus: 'CLEARED',
+                backgroundCheckDate: new Date(),
+            },
+        });
 
-  if (existingUser) {
-    console.log(`⚠️ User with email ${adminEmail} already exists. Skipping seed.`);
-    return;
-  }
-
-  // 3. Hash the password securely
-  const saltRounds = 10;
-  const passwordHash = await bcrypt.hash(rawPassword, saltRounds);
-
-  // 4. Insert the first authenticated user into MySQL
-  const adminUser = await prisma.user.create({
-    data: {
-      firstName: 'abay ',
-      lastName: 'tefera',
-      email: adminEmail,
-      passwordHash: passwordHash,
-      role: UserRole.ADMIN, // Uses the UserRole enum from your schema
-      isActive: true,
-      jobTitle: 'Lead Administrator',
-      department: 'Management',
-      hireDate: new Date(),
-      backgroundCheckStatus: 'CLEARED',
-      backgroundCheckDate: new Date(),
-    },
-  });
-
-  console.log('==================================================');
-  console.log('✅ First authenticated User created successfully!');
-  console.log(`📧 Email: ${adminUser.email}`);
-  console.log(`🔒 Password: ${rawPassword}`);
-  console.log('==================================================');
+        console.log('✅ አድሚን ተጠቃሚ በተሳካ ሁኔታ ተፈጥሯል!', admin.email);
+    } catch (error) {
+        console.error('❌ የዳታቤዝ ስህተት:', error.message || error);
+    } finally {
+        await prisma.$disconnect();
+        await pool.end();
+    }
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Seeding error:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main();
