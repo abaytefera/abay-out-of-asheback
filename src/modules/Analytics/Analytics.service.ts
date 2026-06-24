@@ -1,10 +1,9 @@
 import { Prisma, CaseStatus, CommitteeDecision } from "@prisma/client";
 import prisma from "../../config/prisma";
 import { ChartDatum, DashboardAnalyticsResponse, DateRange } from "./Analytics.types";
-
-
 import { DashboardQuery } from "./Analytics.dto";
-// ── Date range helper ───────────────────────────────────────────────────
+
+// ── Date range helper ────────────────────────────────────────────────────
 export function buildDateRange(year?: number, month?: number): DateRange | undefined {
   if (!year) return undefined;
 
@@ -21,8 +20,6 @@ export function buildDateRange(year?: number, month?: number): DateRange | undef
   };
 }
 
-// Flattens a Prisma `groupBy(...)` result (`[{ supportType: 'RENT', _count: { _all: 4 } }, ...]`)
-// into the `{ name, value }[]` shape every recharts panel on the frontend expects.
 const toChart = <T extends Record<string, unknown>>(rows: T[], nameKey: keyof T): ChartDatum[] =>
   rows.map((r) => ({
     name: String(r[nameKey] ?? "Unknown"),
@@ -36,10 +33,11 @@ async function getFinancialAnalytics(range?: DateRange) {
   const [byType, totals, monthlyTrend] = await Promise.all([
     prisma.financialSupport.groupBy({ by: ["supportType"], where, _count: { _all: true } }),
     prisma.financialSupport.aggregate({ where, _sum: { amount: true } }),
+    // ✅ Quoted table/column names + TO_CHAR instead of DATE_FORMAT (PostgreSQL)
     prisma.$queryRaw<{ month: string; amount: number }[]>`
-      SELECT DATE_FORMAT(disbursedDate, '%Y-%m') AS month, SUM(amount) AS amount
-      FROM FinancialSupport
-      ${range ? Prisma.sql`WHERE disbursedDate BETWEEN ${range.gte} AND ${range.lte}` : Prisma.empty}
+      SELECT TO_CHAR("disbursedDate", 'YYYY-MM') AS month, SUM(amount) AS amount
+      FROM "FinancialSupport"
+      ${range ? Prisma.sql`WHERE "disbursedDate" BETWEEN ${range.gte} AND ${range.lte}` : Prisma.empty}
       GROUP BY month
       ORDER BY month ASC
     `,
@@ -69,7 +67,9 @@ async function getHomeVisitAnalytics(range?: DateRange) {
 
 // ── Health ───────────────────────────────────────────────────────────────
 async function getHealthAnalytics(range?: DateRange) {
-  const totalRecords = await prisma.healthRecord.count({ where: range ? { recordDate: range } : {} });
+  const totalRecords = await prisma.healthRecord.count({
+    where: range ? { recordDate: range } : {},
+  });
   return { totalRecords };
 }
 
@@ -89,19 +89,18 @@ async function getVaccinationAnalytics(range?: DateRange) {
 
 // ── Nutrition ────────────────────────────────────────────────────────────
 async function getNutritionAnalytics(range?: DateRange) {
-  // BMI bucketing needs a CASE expression, which groupBy can't express —
-  // raw SQL keeps this a single aggregated query instead of fetch+reduce.
+  // ✅ Quoted "NutritionRecord" and "recordDate"
   const buckets = await prisma.$queryRaw<{ bucket: string; value: bigint }[]>`
     SELECT
       CASE
         WHEN bmi IS NULL THEN 'No data'
         WHEN bmi < 18.5 THEN 'Underweight'
-        WHEN bmi < 25 THEN 'Normal'
+        WHEN bmi < 25   THEN 'Normal'
         ELSE 'Overweight'
       END AS bucket,
       COUNT(*) AS value
-    FROM NutritionRecord
-    ${range ? Prisma.sql`WHERE recordDate BETWEEN ${range.gte} AND ${range.lte}` : Prisma.empty}
+    FROM "NutritionRecord"
+    ${range ? Prisma.sql`WHERE "recordDate" BETWEEN ${range.gte} AND ${range.lte}` : Prisma.empty}
     GROUP BY bucket
   `;
 
@@ -110,9 +109,6 @@ async function getNutritionAnalytics(range?: DateRange) {
 
 // ── Education ────────────────────────────────────────────────────────────
 async function getEducationAnalytics(range?: DateRange) {
-  // AcademicRecord has no single "event date" column — createdAt is used as
-  // the filterable timeline anchor. Swap for an academicYear string-match
-  // if your records' createdAt doesn't reliably track the school year.
   const where = range ? { createdAt: range } : {};
 
   const [promotionBreakdown, totalRecords, attendanceAgg] = await Promise.all([
@@ -125,7 +121,9 @@ async function getEducationAnalytics(range?: DateRange) {
     promotionBreakdown: toChart(promotionBreakdown, "promotionStatus"),
     totalRecords,
     avgAttendance:
-      attendanceAgg._avg.attendanceRate != null ? Number(attendanceAgg._avg.attendanceRate.toFixed(1)) : null,
+      attendanceAgg._avg.attendanceRate != null
+        ? Number(attendanceAgg._avg.attendanceRate.toFixed(1))
+        : null,
   };
 }
 
@@ -162,9 +160,11 @@ async function getSafeguardingAnalytics(range?: DateRange) {
     }),
   ]);
 
-  // Counts/labels only — never case descriptions or childIds — so this is
-  // safe to expose to PM/Admin/CD regardless of per-case SafeguardingViewer grants.
-  return { byStatus: toChart(byStatus, "status"), byType: toChart(byType, "incidentType"), openCases };
+  return {
+    byStatus: toChart(byStatus, "status"),
+    byType: toChart(byType, "incidentType"),
+    openCases,
+  };
 }
 
 // ── Vulnerability Assessment ─────────────────────────────────────────────
@@ -172,7 +172,11 @@ async function getVulnerabilityAnalytics(range?: DateRange) {
   const where = range ? { assessmentDate: range } : {};
 
   const [decisionBreakdown, scoreAgg, pendingAssessments] = await Promise.all([
-    prisma.vulnerabilityAssessment.groupBy({ by: ["committeeDecision"], where, _count: { _all: true } }),
+    prisma.vulnerabilityAssessment.groupBy({
+      by: ["committeeDecision"],
+      where,
+      _count: { _all: true },
+    }),
     prisma.vulnerabilityAssessment.aggregate({ where, _avg: { vulnerabilityScore: true } }),
     prisma.vulnerabilityAssessment.count({
       where: { ...where, committeeDecision: CommitteeDecision.PENDING },
@@ -182,14 +186,18 @@ async function getVulnerabilityAnalytics(range?: DateRange) {
   return {
     decisionBreakdown: toChart(decisionBreakdown, "committeeDecision"),
     avgVulnerabilityScore:
-      scoreAgg._avg.vulnerabilityScore != null ? Number(scoreAgg._avg.vulnerabilityScore.toFixed(1)) : null,
+      scoreAgg._avg.vulnerabilityScore != null
+        ? Number(scoreAgg._avg.vulnerabilityScore.toFixed(1))
+        : null,
     pendingAssessments,
   };
 }
 
 // ── Other Records ────────────────────────────────────────────────────────
 async function getOtherRecordsAnalytics(range?: DateRange) {
-  const total = await prisma.childOtherRecord.count({ where: range ? { createdAt: range } : {} });
+  const total = await prisma.childOtherRecord.count({
+    where: range ? { createdAt: range } : {},
+  });
   return { total };
 }
 
